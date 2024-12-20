@@ -5,7 +5,9 @@ import os
 import shutil
 import pkgutil
 import subprocess
+from subprocess import CalledProcessError
 import sys
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,10 @@ import structlog
 from meltano.edk import models
 from meltano.edk.extension import ExtensionBase
 from meltano.edk.process import Invoker, log_subprocess_error
+
+import json
+from google.oauth2 import service_account
+from google.auth.credentials import Credentials
 
 try:
     from importlib.resources import files as ir_files
@@ -38,14 +44,24 @@ class elementary(ExtensionBase):
 
         self.slack_channel_name = os.getenv("ELEMENTARY_SLACK_CHANNEL_NAME", "")
         self.slack_token = os.getenv("ELEMENTARY_SLACK_TOKEN", "")
+        self.gcs_bucket_name = os.getenv("ELEMENTARY_GCS_BUCKET_NAME", "")
+
+        self.gcs_service_account_json = os.getenv("ELEMENTARY_GCS_SERVICE_ACCOUNT_JSON", "")
+       
+        if self.gcs_service_account_json:
+            self.temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
+            self.temp_file.write(self.gcs_service_account_json.encode())
+            self.temp_file.close()
+            self.google_service_account_path = self.temp_file.name
+        else:
+            self.google_service_account_path = None
+
         self.days_back= os.getenv("ELEMENTARY_DAYS_BACK", None)
         self.timezone= os.getenv("ELEMENTARY_TIMEZONE", None)
         self.dbt_quoting= os.getenv("ELEMENTARY_DBT_QUOTING", None)
         self.disable_samples= os.getenv("ELEMENTARY_DISABLE_SAMPLES", None)
         self.environment= os.getenv("ELEMENTARY_ENV", None)
         self.full_refresh_dbt_models= os.getenv("ELEMENTARY_FULL_REFRESH_DBT_MODELS", None)
-
-        
 
         self.dbt_profiles_dir = Path(
             os.getenv("ELEMENTARY_PROFILES_DIR", self.dbt_project_dir / "profiles")
@@ -55,8 +71,6 @@ class elementary(ExtensionBase):
             os.getenv("ELEMENTARY_EXT_SKIP_PRE_INVOKE", "false").lower() == "true"
         )
         self.elementary_invoker = Invoker(self.elementary_bin, cwd=self.dbt_profiles_dir)
-
-
 
     def pre_invoke(self, invoke_name: str | None, *invoke_args: Any) -> None:
         """Pre-invoke hook.
@@ -209,46 +223,39 @@ class elementary(ExtensionBase):
             file_path=self.file_path,
             dbt_profiles_dir=self.dbt_profiles_dir,
         )
-
+    
     def monitor_send_report(self) -> None:
-        """Generates a report through and send it to a specific slack channel.
-
-        Args:
-            profiles-dir: Path to dbt profiles directory
-            slack-token: Slack token for channel
-            slack-channel-name: Name of the slack channel
-
         """
-        command_name = "monitor send report"
+        Generates a report and sends it to a GCS bucket.
+        """
+        if not self.gcs_bucket_name or not self.google_service_account_path:
+            log.error("GCS bucket name or service account path not provided.")
+            return
 
-        log.info(
-            f"elementary {command_name}",
-            slack_token=self.slack_token,
-            slack_channel_name=self.slack_channel_name,
-            dbt_profiles_dir=self.dbt_profiles_dir,
-        )
-
+        log.info(f"Sending report to GCS bucket: {self.gcs_bucket_name}")
+        
         try:
             self.elementary_invoker.run_and_log(
                 "monitor",
                 "send-report",
                 f"--profiles-dir={self.dbt_profiles_dir}",
+                f"--google-service-account-path={self.google_service_account_path}",
+                f"--gcs-bucket-name={self.gcs_bucket_name}",
+                "--update-bucket-website=true",
                 f"--slack-token={self.slack_token}",
                 f"--slack-channel-name={self.slack_channel_name}",
+                f"--report-url=https://storage.cloud.google.com/{self.gcs_bucket_name}/index.html"
             )
+            log.info(f"Report successfully sent to GCS bucket: {self.gcs_bucket_name} with website updated.")
+        
         except subprocess.CalledProcessError as err:
-            log_subprocess_error(
-                f"elementary {command_name}", err, "elementary invocation failed"
-            )
-            sys.exit(err.returncode)
+            log.error(f"Error sending report to GCS bucket {self.gcs_bucket_name}: {err}", exc_info=True)
 
-        log.info(
-            f"elementary {command_name}",
-            slack_token=self.slack_token,
-            slack_channel_name=self.slack_channel_name,
-            dbt_profiles_dir=self.dbt_profiles_dir,
-        )
-
+    def cleanup(self) -> None:
+        """Clean up the temporary service account file."""
+        if self.google_service_account_path:
+            os.remove(self.google_service_account_path)
+            log.info("Temporary service account file removed.")
 
     def describe(self) -> models.Describe:
         """Describe the extension.
