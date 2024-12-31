@@ -224,6 +224,38 @@ class elementary(ExtensionBase):
             dbt_profiles_dir=self.dbt_profiles_dir,
         )
     
+    def monitor_send_alert(self) -> None:
+        """
+        Executes the 'monitor' command - send alert to slack channel.
+
+        Args:
+            profiles-dir: Path to dbt profiles directory.
+            slack-token: Slack token for notifications.
+            slack-channel-name: Slack channel name for notifications.
+            filters: Optional filters for selecting specific models or metrics.
+        """
+        command_name = "monitor send alert"
+        try:
+            self.elementary_invoker.run_and_log(
+                "monitor",
+                f"--profiles-dir={self.dbt_profiles_dir}",
+                f"--slack-token={self.slack_token}",
+                f"--slack-channel-name={self.slack_channel_name}",
+                "--group-by=table",
+            )
+        except subprocess.CalledProcessError as err:
+            log_subprocess_error(
+                f"elementary {command_name}", err, "elementary invocation failed"
+            )
+            sys.exit(err.returncode)
+
+        log.info(
+            f"elementary {command_name}",
+            dbt_profiles_dir=self.dbt_profiles_dir,
+            slack_token=self.slack_token,
+            slack_channel_name=self.slack_channel_name,
+        )
+    
     def monitor_send_report(self) -> None:
         """
         Generates a report and sends it to a GCS bucket.

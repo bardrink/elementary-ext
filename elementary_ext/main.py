@@ -49,6 +49,17 @@ def monitor_report(ctx: typer.Context) -> None:
         sys.exit(1)
 
 @app.command()
+def monitor_send_alert(ctx: typer.Context) -> None:
+    """Generate alert"""
+    try:
+        ext.monitor_send_alert()
+    except Exception:
+        log.exception(
+            "monitor send alert failed with uncaught exception, please report to maintainer"
+        )
+        sys.exit(1)
+
+@app.command()
 def monitor_send_report(ctx: typer.Context) -> None:
     """Generate report for elementary and send it through slack"""
     try:
