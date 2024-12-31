@@ -241,7 +241,7 @@ class elementary(ExtensionBase):
                 f"--profiles-dir={self.dbt_profiles_dir}",
                 f"--slack-token={self.slack_token}",
                 f"--slack-channel-name={self.slack_channel_name}",
-                "--group-by=table",
+                #"--group-by=table",
             )
         except subprocess.CalledProcessError as err:
             log_subprocess_error(
