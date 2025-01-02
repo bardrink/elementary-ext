@@ -2,7 +2,7 @@
 
 import os
 import sys
-from typing import List
+from typing import List, Optional
 
 import structlog
 import typer
@@ -49,10 +49,10 @@ def monitor_report(ctx: typer.Context) -> None:
         sys.exit(1)
 
 @app.command()
-def monitor_send_alert(ctx: typer.Context) -> None:
+def monitor_send_alert(ctx: typer.Context, filters: Optional[str] = None) -> None:
     """Generate alert"""
     try:
-        ext.monitor_send_alert()
+        ext.monitor_send_alert(filters=filters)
     except Exception:
         log.exception(
             "monitor send alert failed with uncaught exception, please report to maintainer"

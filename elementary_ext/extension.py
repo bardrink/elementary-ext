@@ -224,7 +224,7 @@ class elementary(ExtensionBase):
             dbt_profiles_dir=self.dbt_profiles_dir,
         )
     
-    def monitor_send_alert(self) -> None:
+    def monitor_send_alert(self, filters: Optional[str] = None) -> None:
         """
         Executes the 'monitor' command - send alert to slack channel.
 
@@ -236,13 +236,17 @@ class elementary(ExtensionBase):
         """
         command_name = "monitor send alert"
         try:
-            self.elementary_invoker.run_and_log(
+            command = [
                 "monitor",
                 f"--profiles-dir={self.dbt_profiles_dir}",
                 f"--slack-token={self.slack_token}",
                 f"--slack-channel-name={self.slack_channel_name}",
-                #"--group-by=table",
-            )
+            ]
+            if filters:
+                command.append(f"--filters={filters}")
+
+            self.elementary_invoker.run_and_log(*command)
+
         except subprocess.CalledProcessError as err:
             log_subprocess_error(
                 f"elementary {command_name}", err, "elementary invocation failed"
@@ -254,6 +258,7 @@ class elementary(ExtensionBase):
             dbt_profiles_dir=self.dbt_profiles_dir,
             slack_token=self.slack_token,
             slack_channel_name=self.slack_channel_name,
+            filters=filters,
         )
     
     def monitor_send_report(self) -> None:
